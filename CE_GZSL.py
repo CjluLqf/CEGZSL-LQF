@@ -4,6 +4,8 @@ import sys
 sys.path.append("..")
 import os
 import random
+import csv
+from datetime import datetime
 import torch
 import torch.nn as nn
 import torch.autograd as autograd
@@ -90,6 +92,36 @@ model_path = './models/' + opt.dataset
 if not os.path.exists(model_path):
     os.makedirs(model_path)
 best_H = -1.0
+history_path = os.path.join(model_path, 'experiment_history.csv')
+run_timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+
+def append_history_on_new_best(epoch_id, s_val, u_val, h_val):
+    fieldnames = [
+        'timestamp', 'dataset', 'seed', 'best_epoch', 'S', 'U', 'H',
+        'batch_size', 'lr', 'syn_num', 'ins_weight', 'cls_weight', 'ins_temp', 'cls_temp'
+    ]
+    file_exists = os.path.exists(history_path)
+    with open(history_path, 'a', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow({
+            'timestamp': run_timestamp,
+            'dataset': opt.dataset,
+            'seed': opt.manualSeed,
+            'best_epoch': epoch_id,
+            'S': s_val,
+            'U': u_val,
+            'H': h_val,
+            'batch_size': opt.batch_size,
+            'lr': opt.lr,
+            'syn_num': opt.syn_num,
+            'ins_weight': opt.ins_weight,
+            'cls_weight': opt.cls_weight,
+            'ins_temp': opt.ins_temp,
+            'cls_temp': opt.cls_temp,
+        })
 
 if len(opt.gpus.split(','))>1:
     netG=nn.DataParallel(netG)
@@ -314,16 +346,17 @@ for epoch in range(opt.nepoch):
         print('unseen=%.4f, seen=%.4f, h=%.4f' % (cls.acc_unseen, cls.acc_seen, cls.H))
         if cls.H > best_H:
             best_H = cls.H
-            save_path = os.path.join(model_path, 'best_H_model.pth')
+            best_epoch = epoch + 1
+            save_path = os.path.join(model_path, 'best_H_summary.pth')
             torch.save({
-                'epoch': epoch + 1,
-                'H': cls.H,
-                'acc_seen': cls.acc_seen,
-                'acc_unseen': cls.acc_unseen,
-                'netG_state_dict': netG.module.state_dict() if isinstance(netG, nn.DataParallel) else netG.state_dict(),
-                'netMap_state_dict': netMap.module.state_dict() if isinstance(netMap, nn.DataParallel) else netMap.state_dict(),
+                'epoch': best_epoch,
+                'H': best_H,
+                'S': cls.acc_seen,
+                'U': cls.acc_unseen,
+                'configs': vars(opt),
             }, save_path)
-            print('New best H: %.4f, model saved to %s' % (best_H, save_path))
+            append_history_on_new_best(best_epoch, cls.acc_seen, cls.acc_unseen, best_H)
+            print('New best H: %.4f, summary saved to %s' % (best_H, save_path))
 
     else:  # conventional zero-shot learning
         syn_feature, syn_label = generate_syn_feature(netG, data.unseenclasses, data.attribute, opt.syn_num)
