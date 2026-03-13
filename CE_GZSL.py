@@ -89,6 +89,7 @@ F_ha = model.Dis_Embed_Att(opt)
 model_path = './models/' + opt.dataset
 if not os.path.exists(model_path):
     os.makedirs(model_path)
+best_H = -1.0
 
 if len(opt.gpus.split(','))>1:
     netG=nn.DataParallel(netG)
@@ -311,6 +312,18 @@ for epoch in range(opt.nepoch):
                                                   opt.classifier_lr, 0.5, 25, opt.syn_num,
                                                   True)
         print('unseen=%.4f, seen=%.4f, h=%.4f' % (cls.acc_unseen, cls.acc_seen, cls.H))
+        if cls.H > best_H:
+            best_H = cls.H
+            save_path = os.path.join(model_path, 'best_H_model.pth')
+            torch.save({
+                'epoch': epoch + 1,
+                'H': cls.H,
+                'acc_seen': cls.acc_seen,
+                'acc_unseen': cls.acc_unseen,
+                'netG_state_dict': netG.module.state_dict() if isinstance(netG, nn.DataParallel) else netG.state_dict(),
+                'netMap_state_dict': netMap.module.state_dict() if isinstance(netMap, nn.DataParallel) else netMap.state_dict(),
+            }, save_path)
+            print('New best H: %.4f, model saved to %s' % (best_H, save_path))
 
     else:  # conventional zero-shot learning
         syn_feature, syn_label = generate_syn_feature(netG, data.unseenclasses, data.attribute, opt.syn_num)
