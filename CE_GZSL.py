@@ -5,6 +5,8 @@ sys.path.append("..")
 import os
 import random
 import csv
+import signal
+import atexit
 from datetime import datetime
 import torch
 import torch.nn as nn
@@ -92,8 +94,12 @@ model_path = './models/' + opt.dataset
 if not os.path.exists(model_path):
     os.makedirs(model_path)
 best_H = -1.0
+best_S = -1.0
+best_U = -1.0
+best_epoch = -1
 history_path = os.path.join(model_path, 'experiment_history.csv')
 run_timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+history_flushed = False
 
 
 def append_history_on_new_best(epoch_id, s_val, u_val, h_val):
@@ -122,6 +128,25 @@ def append_history_on_new_best(epoch_id, s_val, u_val, h_val):
             'ins_temp': opt.ins_temp,
             'cls_temp': opt.cls_temp,
         })
+
+
+def flush_best_history_once():
+    global history_flushed
+    if history_flushed:
+        return
+    if best_epoch > 0:
+        append_history_on_new_best(best_epoch, best_S, best_U, best_H)
+    history_flushed = True
+
+
+def handle_sigint(signum, frame):
+    print('Interrupted by user, flushing current best H record...')
+    flush_best_history_once()
+    raise KeyboardInterrupt
+
+
+signal.signal(signal.SIGINT, handle_sigint)
+atexit.register(flush_best_history_once)
 
 if len(opt.gpus.split(','))>1:
     netG=nn.DataParallel(netG)
@@ -347,15 +372,16 @@ for epoch in range(opt.nepoch):
         if cls.H > best_H:
             best_H = cls.H
             best_epoch = epoch + 1
+            best_S = cls.acc_seen
+            best_U = cls.acc_unseen
             save_path = os.path.join(model_path, 'best_H_summary.pth')
             torch.save({
                 'epoch': best_epoch,
                 'H': best_H,
-                'S': cls.acc_seen,
-                'U': cls.acc_unseen,
+                'S': best_S,
+                'U': best_U,
                 'configs': vars(opt),
             }, save_path)
-            append_history_on_new_best(best_epoch, cls.acc_seen, cls.acc_unseen, best_H)
             print('New best H: %.4f, summary saved to %s' % (best_H, save_path))
 
     else:  # conventional zero-shot learning
@@ -373,4 +399,6 @@ for epoch in range(opt.nepoch):
     netG.train()
     for p in netMap.parameters():  # reset requires_grad
         p.requires_grad = True
+
+flush_best_history_once()
 
