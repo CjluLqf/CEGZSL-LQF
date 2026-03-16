@@ -63,7 +63,29 @@ parser.add_argument('--nclass_all', type=int, default=200, help='number of all c
 parser.add_argument('--nclass_seen', type=int, default=150, help='number of all classes')
 
 parser.add_argument('--gpus', default='0', help='the number of the GPU to use')
+
+
+def has_cli_arg(flag_name):
+    eq_flag = flag_name + '='
+    for arg in sys.argv[1:]:
+        if arg == flag_name or arg.startswith(eq_flag):
+            return True
+    return False
+
+
 opt = parser.parse_args()
+
+if opt.dataset.upper() == 'SUN':
+    opt.dataset = 'SUN'
+    if not has_cli_arg('--class_embedding'):
+        opt.class_embedding = 'att'
+    if not has_cli_arg('--attSize'):
+        opt.attSize = 102
+    if not has_cli_arg('--nclass_all'):
+        opt.nclass_all = 717
+    if not has_cli_arg('--nclass_seen'):
+        opt.nclass_seen = 645
+
 print(opt)
 
 os.environ['CUDA_VISIBLE_DEVICES'] = opt.gpus

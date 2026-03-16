@@ -1,22 +1,26 @@
-## Plan: 中断可恢复的单条最佳记录
+## Plan: 新增 SUN 训练与一键脚本
 
 ### 将要修改的文件路径
 - /home/st/pytorch/lqf/CEGZSL-LQF/plan.md
 - /home/st/pytorch/lqf/CEGZSL-LQF/CE_GZSL.py
+- /home/st/pytorch/lqf/CEGZSL-LQF/README.md
+
+### 将要新增的文件路径
+- /home/st/pytorch/lqf/CEGZSL-LQF/run_sun.sh
 
 ### 目标
-- 每次运行仅追加 1 条最终最佳 H 记录。
-- 即使 Ctrl+C 中断，也能写入当前最佳 H 对应的 S/U/epoch。
-- S/U 必须是最佳 H 发生时对应值，而非全程独立最优。
+- 通过命令行参数在 CE_GZSL.py 内集成 SUN 训练/测试入口。
+- 保持 CUB 默认参数与行为完全不变。
+- 提供 SUN 一键脚本，后续直接运行脚本即可自动带入参数。
 
 ### 实施步骤
-1. 保留运行级缓存变量 best_H、best_S、best_U、best_epoch，并仅在 H 刷新时更新它们。
-2. 将训练主循环包裹到 try/except KeyboardInterrupt/finally 中。
-3. 删除循环内任何 CSV 追加写入。
-4. 在 finally 中统一执行一次写入：if best_epoch > 0: append_history_on_new_best(best_epoch, best_S, best_U, best_H)。
-5. 保留 best_H_summary.pth 的轻量覆盖保存，字段与当前最佳缓存一致。
+1. 在 CE_GZSL.py 中增加 dataset=SUN 的参数兜底逻辑，只覆盖 SUN 必需参数。
+2. SUN 必需覆盖项：class_embedding=att、attSize=102、nclass_all=717、nclass_seen=645。
+3. 保持“命令行显式传参优先”，如用户手动指定 attSize，则不使用兜底值。
+4. 新增 run_sun.sh，封装 SUN 推荐启动命令，首版其余超参复用 CUB。
+5. 更新 README.md，补充 SUN 用法与 run_sun.sh 说明。
 
 ### 验证
-1. 正常运行一次，CSV 仅新增 1 行。
-2. 中断运行一次，CSV 仍新增 1 行（若本次已出现最佳 H）。
-3. CSV 与 best_H_summary.pth 的 S/U/H/epoch 完全一致。
+1. 运行 python CE_GZSL.py（无参数），确认仍是 CUB 默认值。
+2. 运行 bash run_sun.sh，确认 SUN 必需参数生效。
+3. 运行 python CE_GZSL.py --dataset SUN --attSize 120，确认用户显式参数优先。
